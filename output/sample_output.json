@@ -1,0 +1,29 @@
+{
+  "note": "Illustrative sample only (2 of the 10 supplied companies), hand-checked against real sources, to show the expected schema and output quality before running the full pipeline against a live Claude API key. Run `python -m src.pipeline` to generate the real output.json for all 10 companies.",
+  "results": [
+    {
+      "company_name": "AJC DEVELOPMENTS (SOUTH) LIMITED",
+      "website": "AJCHOMES.CO.UK",
+      "current_sic": "96090",
+      "current_sic_description": "Other service activities n.e.c.",
+      "inferred_sic": "41202 - Construction of domestic buildings",
+      "evidence": "Homepage and linked news content describe the company as a housebuilder developing new-build homes across multiple sites, offering show homes, house types and Help to Buy / Part Exchange schemes to buyers.",
+      "confidence": "high",
+      "company_summary": "A residential housebuilder that designs and constructs new-build homes on developments across the UK.",
+      "scrape_status": "success",
+      "resolved_url": "https://ajchomes.co.uk/"
+    },
+    {
+      "company_name": "STOLEN GOAT LTD",
+      "website": "WWW.STOLENGOAT.COM",
+      "current_sic": "96090",
+      "current_sic_description": "Other service activities n.e.c.",
+      "inferred_sic": "14190 - Manufacture of other wearing apparel and accessories",
+      "evidence": "Homepage markets cycling jerseys, bib shorts and cycling accessories sold direct-to-consumer under the Stolen Goat brand.",
+      "confidence": "high",
+      "company_summary": "A cycling apparel brand that designs and sells cycling clothing and accessories online.",
+      "scrape_status": "success",
+      "resolved_url": "https://www.stolengoat.com/"
+    }
+  ]
+}
