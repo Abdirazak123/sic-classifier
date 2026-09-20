@@ -85,9 +85,12 @@ looks like end to end.
   prompt. This keeps the prompt small, but means it's worth spot-checking
   outputs against the [official ONS SIC 2007 list](https://onsdigital.github.io/dp-classification-tools/standard-industrial-classification/ONS_SIC_hierarchy_view.html)
   for a production version.
-- No paid tools/APIs are used — only `requests`, `beautifulsoup4`, and the
-  Claude API (which needs an API key, but Anthropic provides free trial
-  credit, in line with "no need to use anything that should incur a cost").
+- No paid tools/APIs are used. The classifier defaults to the **Gemini API**
+  (`gemini-2.0-flash`), which has a genuinely free tier at
+  [aistudio.google.com](https://aistudio.google.com) — no card required.
+  Claude is supported as a drop-in alternative (`LLM_PROVIDER=anthropic` in
+  `.env`) for anyone who already has API credit, since the brief mentions
+  either is fine.
 
 ## If I had more time
 
@@ -102,11 +105,13 @@ looks like end to end.
 
 ## Tools used
 
-Python 3, `requests`, `beautifulsoup4`, and the Claude API (Anthropic) for
-the classification step. I used Claude throughout while building this — for
-structuring the pipeline, writing the prompt, and reviewing the code — which
-the brief explicitly welcomed. All of the design decisions and trade-offs
-above are mine; Claude was the assistant, not the author.
+Python 3, `requests`, `beautifulsoup4`, and the Gemini API (Google) for the
+classification step, with Claude (Anthropic) supported as a drop-in
+alternative — see `src/classifier.py`. I used Claude throughout while
+building this — for structuring the pipeline, writing the prompt, and
+reviewing the code — which the brief explicitly welcomed. All of the design
+decisions and trade-offs above are mine; the AI was the assistant, not the
+author.
 
 ## How to run
 
@@ -114,13 +119,18 @@ above are mine; Claude was the assistant, not the author.
 python -m venv .venv && source .venv/bin/activate   # optional but recommended
 pip install -r requirements.txt
 
-cp .env.example .env        # then add your ANTHROPIC_API_KEY to .env
+cp .env.example .env
+# Edit .env and add a free Gemini key from https://aistudio.google.com
+# (Get API key -> Create API key - no card needed). Leave LLM_PROVIDER=gemini.
 export $(grep -v '^#' .env | xargs)
 
 python -m src.pipeline                      # runs all companies in companies.csv
 python -m src.pipeline --limit 3            # quick test on the first 3 rows
 python -m src.pipeline --input other.csv --output output/other.json
 ```
+
+To use Claude instead, set `LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY`
+in `.env` — no code changes needed.
 
 Output is written to `output/output.json`. Progress/logging goes to stderr
 so it doesn't interfere with anything reading stdout.

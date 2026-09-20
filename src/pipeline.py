@@ -18,11 +18,9 @@ import json
 import sys
 from datetime import datetime, timezone
 
-import anthropic
-
 from . import config
 from .scraper import scrape_homepage
-from .classifier import classify_company
+from .classifier import classify_company, make_client
 
 
 def load_companies(csv_path: str) -> list[dict]:
@@ -31,7 +29,7 @@ def load_companies(csv_path: str) -> list[dict]:
         return list(reader)
 
 
-def process_company(client: anthropic.Anthropic, row: dict) -> dict:
+def process_company(client, row: dict) -> dict:
     name = row["name"].strip()
     website = row["website"].strip()
     current_sic = row.get("SIC", "").strip()
@@ -79,13 +77,10 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=None, help="Only process the first N rows (useful for testing).")
     args = parser.parse_args()
 
-    if not config.ANTHROPIC_API_KEY:
-        sys.exit(
-            "ANTHROPIC_API_KEY is not set. Copy .env.example to .env, add your key, "
-            "and `export $(cat .env | xargs)` (or use python-dotenv) before running."
-        )
-
-    client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+    try:
+        client = make_client()
+    except RuntimeError as exc:
+        sys.exit(str(exc))
 
     companies = load_companies(args.input)
     if args.limit:
@@ -99,7 +94,7 @@ def main() -> None:
     output = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "source_file": args.input,
-        "model_used": config.CLAUDE_MODEL,
+        "model_used": config.GEMINI_MODEL if config.LLM_PROVIDER == "gemini" else config.CLAUDE_MODEL,
         "total_companies": len(results),
         "successful_scrapes": sum(1 for r in results if r["scrape_status"] == "success"),
         "results": results,

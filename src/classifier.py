@@ -1,16 +1,21 @@
 """
 classifier.py
 -------------
-Sends a company's homepage text to Claude and asks it to infer a more
+Sends a company's homepage text to an LLM and asks it to infer a more
 accurate UK SIC 2007 code than whatever generic/outdated code is on
 file (e.g. 96090 "Other service activities n.e.c.").
+
+Supports two providers, switched via LLM_PROVIDER in config.py:
+  - "gemini"    (default) - Google Gemini, has a free API tier with no
+                 card required: https://aistudio.google.com
+  - "anthropic" - Claude, needs a paid/trial Anthropic API key
 
 Why an LLM rather than keyword-matching against the SIC list:
 the whole point of the task is that the *current* classification is too
 generic to be useful, and a rules/keyword approach tends to just recreate
 that problem (most homepages don't literally say "manufacture of X").
 An LLM can read the page the way a human analyst would - tagline, product
-photos captions, "about us" copy - and reason about what the business
+photo captions, "about us" copy - and reason about what the business
 actually does, while still being constrained to return a valid SIC code
 and to quote its evidence so the output is auditable.
 """
@@ -21,8 +26,6 @@ import json
 import time
 from dataclasses import dataclass
 from typing import Optional
-
-import anthropic
 
 from . import config
 
@@ -73,8 +76,59 @@ def _build_user_prompt(company_name: str, current_sic: str, scraped_text: str) -
     )
 
 
+def _extract_json(raw_text: str) -> dict:
+    raw_text = raw_text.strip()
+    if raw_text.startswith("```"):
+        raw_text = raw_text.strip("`")
+        raw_text = raw_text[4:] if raw_text.lower().startswith("json") else raw_text
+    return json.loads(raw_text.strip())
+
+
+def make_client():
+    """Build whichever provider client is configured. Called once and
+    reused across all companies in a run."""
+    if config.LLM_PROVIDER == "gemini":
+        if not config.GEMINI_API_KEY:
+            raise RuntimeError(
+                "GEMINI_API_KEY is not set. Get a free key at https://aistudio.google.com "
+                "(Get API key -> Create API key), no card required."
+            )
+        from google import genai
+        return genai.Client(api_key=config.GEMINI_API_KEY)
+
+    elif config.LLM_PROVIDER == "anthropic":
+        if not config.ANTHROPIC_API_KEY:
+            raise RuntimeError("ANTHROPIC_API_KEY is not set.")
+        import anthropic
+        return anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+
+    raise RuntimeError(f"Unknown LLM_PROVIDER: {config.LLM_PROVIDER!r} (expected 'gemini' or 'anthropic')")
+
+
+def _classify_with_gemini(client, user_prompt: str) -> str:
+    response = client.models.generate_content(
+        model=config.GEMINI_MODEL,
+        contents=user_prompt,
+        config={
+            "system_instruction": SYSTEM_PROMPT,
+            "response_mime_type": "application/json",
+        },
+    )
+    return response.text
+
+
+def _classify_with_anthropic(client, user_prompt: str) -> str:
+    response = client.messages.create(
+        model=config.CLAUDE_MODEL,
+        max_tokens=500,
+        system=SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": user_prompt}],
+    )
+    return "".join(block.text for block in response.content if getattr(block, "type", None) == "text")
+
+
 def classify_company(
-    client: "anthropic.Anthropic",
+    client,
     company_name: str,
     current_sic: str,
     scraped_text: str,
@@ -82,29 +136,15 @@ def classify_company(
     if not scraped_text:
         return ClassificationResult(error="no_text_to_classify")
 
+    user_prompt = _build_user_prompt(company_name, current_sic, scraped_text)
+
     try:
-        response = client.messages.create(
-            model=config.CLAUDE_MODEL,
-            max_tokens=500,
-            system=SYSTEM_PROMPT,
-            messages=[
-                {
-                    "role": "user",
-                    "content": _build_user_prompt(company_name, current_sic, scraped_text),
-                }
-            ],
-        )
-        raw_text = "".join(
-            block.text for block in response.content if getattr(block, "type", None) == "text"
-        ).strip()
+        if config.LLM_PROVIDER == "gemini":
+            raw_text = _classify_with_gemini(client, user_prompt)
+        else:
+            raw_text = _classify_with_anthropic(client, user_prompt)
 
-        # Claude is asked for bare JSON, but strip fences defensively in
-        # case a model response wraps it in ```json anyway.
-        if raw_text.startswith("```"):
-            raw_text = raw_text.strip("`")
-            raw_text = raw_text[4:] if raw_text.lower().startswith("json") else raw_text
-
-        parsed = json.loads(raw_text)
+        parsed = _extract_json(raw_text)
         return ClassificationResult(
             inferred_sic_code=parsed.get("inferred_sic_code"),
             confidence=parsed.get("confidence"),
@@ -114,7 +154,7 @@ def classify_company(
 
     except json.JSONDecodeError as exc:
         return ClassificationResult(error=f"unparseable_llm_response:{exc}")
-    except anthropic.APIError as exc:
-        return ClassificationResult(error=f"anthropic_api_error:{exc}")
+    except Exception as exc:  # provider SDKs raise their own error types
+        return ClassificationResult(error=f"llm_call_failed:{type(exc).__name__}:{exc}")
     finally:
         time.sleep(config.SECONDS_BETWEEN_LLM_CALLS)

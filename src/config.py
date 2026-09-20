@@ -7,9 +7,18 @@ framework - there are only a handful of knobs that actually matter here.
 
 import os
 
-# --- Anthropic / Claude -----------------------------------------------------
+# --- LLM provider -------------------------------------------------------
+# "anthropic" (Claude, requires a paid/trial API key) or
+# "gemini" (Google Gemini, has a genuinely free API tier - no card needed,
+# see https://aistudio.google.com). Defaults to gemini so this runs
+# without any billing setup out of the box.
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "gemini").lower()
+
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-6")
+
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
 
 # --- Scraping ----------------------------------------------------------------
 REQUEST_TIMEOUT = 10          # seconds per HTTP request
