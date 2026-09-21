@@ -69,7 +69,9 @@ evidence. I added:
 
 See `output/sample_output.json` for two hand-checked example records
 (one housebuilder, one cycling-apparel brand) showing what a correct result
-looks like end to end.
+looks like end to end, and `output/output.json` (once you run the pipeline)
+for the full 10-company run — including the two scrape-failure modes above
+(dead domain vs. bot-blocked) reported honestly rather than papered over.
 
 ## Assumptions & limitations
 
@@ -79,7 +81,20 @@ looks like end to end.
   step below rather than built, to keep the solution to what was asked.
 - Some of the supplied URLs are stale, redirect elsewhere, or actively block
   simple bots (Cloudflare challenge pages, etc.). These are reported in
-  `scrape_status`/`evidence` rather than causing the run to fail.
+  `scrape_status`/`evidence` rather than causing the run to fail. On a live
+  run against the 10 supplied companies, 6/10 homepages were reachable. The
+  other 4 failed for two distinct reasons worth distinguishing: three
+  returned a connection error (the domain didn't resolve or refused the
+  connection — likely stale/dead URLs in the source data), while one
+  returned an HTTP 403 (the site's bot protection actively blocked the
+  request, rather than the domain being unreachable). Telling these apart
+  matters — one is "the lead is probably dead", the other is "worth a
+  retry or a different scraping approach".
+- The classifier retries once on transient provider errors (e.g. a
+  `503 UNAVAILABLE` from an overloaded free-tier endpoint) before giving
+  up, since these clear up on their own — added after a live run showed
+  two otherwise-successful scrapes failing only at the classification step
+  for this reason.
 - The classifier is asked to return a real SIC 2007 code from its own
   knowledge rather than being given the full ~700-code SIC list in the
   prompt. This keeps the prompt small, but means it's worth spot-checking

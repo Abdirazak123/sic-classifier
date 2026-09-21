@@ -33,9 +33,13 @@ USER_AGENT = (
 # than this to reveal what a company does, and it keeps token cost down.
 MAX_TEXT_CHARS = 6000
 
-# --- Rate limiting -------------------------------------------------------
+# --- Rate limiting / retries ----------------------------------------------
 # Small pause between LLM calls so a batch run doesn't hammer the API.
 SECONDS_BETWEEN_LLM_CALLS = 0.5
+# Free-tier endpoints occasionally return a transient "overloaded" error
+# (e.g. Gemini 503 UNAVAILABLE) - worth a couple of retries before giving up.
+MAX_LLM_RETRIES = 2
+LLM_RETRY_BACKOFF_SECONDS = 2
 
 # --- Paths -----------------------------------------------------------------
 INPUT_CSV = "companies.csv"

@@ -138,23 +138,35 @@ def classify_company(
 
     user_prompt = _build_user_prompt(company_name, current_sic, scraped_text)
 
-    try:
-        if config.LLM_PROVIDER == "gemini":
-            raw_text = _classify_with_gemini(client, user_prompt)
-        else:
-            raw_text = _classify_with_anthropic(client, user_prompt)
+    # Free-tier LLM endpoints occasionally return a transient "overloaded"
+    # error (e.g. Gemini 503 UNAVAILABLE) that clears up on retry - worth
+    # a couple of attempts before giving up on an otherwise-good scrape.
+    last_error = None
+    for attempt in range(config.MAX_LLM_RETRIES + 1):
+        try:
+            if config.LLM_PROVIDER == "gemini":
+                raw_text = _classify_with_gemini(client, user_prompt)
+            else:
+                raw_text = _classify_with_anthropic(client, user_prompt)
 
-        parsed = _extract_json(raw_text)
-        return ClassificationResult(
-            inferred_sic_code=parsed.get("inferred_sic_code"),
-            confidence=parsed.get("confidence"),
-            evidence=parsed.get("evidence"),
-            company_summary=parsed.get("company_summary"),
-        )
+            parsed = _extract_json(raw_text)
+            return ClassificationResult(
+                inferred_sic_code=parsed.get("inferred_sic_code"),
+                confidence=parsed.get("confidence"),
+                evidence=parsed.get("evidence"),
+                company_summary=parsed.get("company_summary"),
+            )
 
-    except json.JSONDecodeError as exc:
-        return ClassificationResult(error=f"unparseable_llm_response:{exc}")
-    except Exception as exc:  # provider SDKs raise their own error types
-        return ClassificationResult(error=f"llm_call_failed:{type(exc).__name__}:{exc}")
-    finally:
-        time.sleep(config.SECONDS_BETWEEN_LLM_CALLS)
+        except json.JSONDecodeError as exc:
+            last_error = f"unparseable_llm_response:{exc}"
+            break  # retrying won't fix malformed output
+        except Exception as exc:  # provider SDKs raise their own error types
+            last_error = f"llm_call_failed:{type(exc).__name__}:{exc}"
+            is_transient = "503" in str(exc) or "UNAVAILABLE" in str(exc) or "overloaded" in str(exc).lower()
+            if not is_transient or attempt == config.MAX_LLM_RETRIES:
+                break
+            time.sleep(config.LLM_RETRY_BACKOFF_SECONDS * (attempt + 1))
+        finally:
+            time.sleep(config.SECONDS_BETWEEN_LLM_CALLS)
+
+    return ClassificationResult(error=last_error)
